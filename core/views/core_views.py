@@ -1,6 +1,6 @@
 """
-core/views.py
-=============
+core/views/core_views.py
+========================
 Vistas base de la aplicación core.
 
 NOTA ARQUITECTÓNICA: No se importa ni usa django.db.models.

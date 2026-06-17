@@ -317,3 +317,59 @@ class PlaceRepository(BaseRepository[PlaceDocument]):
         except PyMongoError as exc:
             logger.error("Error en get_municipios_disponibles(): %s", exc)
             return []
+
+    def get_nearby(
+        self,
+        lat: float,
+        lng: float,
+        max_distance: int = 10_000,
+        limit: int = 20,
+    ) -> list[PlaceDocument]:
+        """
+        Devuelve lugares ordenados por cercanía a las coordenadas dadas.
+
+        Requiere que la colección tenga un índice 2dsphere sobre el campo
+        'ubicacion' (formato GeoJSON Point). Los resultados llegan ya
+        ordenados de más cercano a más lejano por MongoDB.
+
+        Estructura esperada del campo 'ubicacion' en MongoDB:
+            { "type": "Point", "coordinates": [lng, lat] }
+            ⚠️ MongoDB usa [longitud, latitud], NO [latitud, longitud].
+
+        Args:
+            lat:          Latitud del punto de referencia (decimal).
+            lng:          Longitud del punto de referencia (decimal).
+            max_distance: Radio máximo en metros (default 10 km).
+            limit:        Máximo de resultados (default 20).
+
+        Returns:
+            Lista de PlaceDocument ordenados por distancia ascendente.
+            Lista vacía si no hay resultados o si falla la consulta.
+        """
+        try:
+            cursor = self._collection.find(
+                {
+                    "ubicacion": {
+                        "$near": {
+                            "$geometry": {
+                                "type": "Point",
+                                # ⚠️ GeoJSON: [longitud, latitud]
+                                "coordinates": [lng, lat],
+                            },
+                            "$maxDistance": max_distance,
+                        }
+                    }
+                }
+            ).limit(limit)
+
+            return [
+                self._map_document(self._serialize_id(doc))
+                for doc in cursor
+            ]
+
+        except PyMongoError as exc:
+            logger.error(
+                "Error en get_nearby(lat=%s, lng=%s, max_distance=%s): %s",
+                lat, lng, max_distance, exc,
+            )
+            return []

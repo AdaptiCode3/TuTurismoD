@@ -44,6 +44,8 @@ INSTALLED_APPS: list[str] = [
     'django.contrib.staticfiles',
     # CORS — debe aparecer en INSTALLED_APPS para que Django lo reconozca
     'corsheaders',
+    # Django REST Framework
+    'rest_framework',
     # Apps del proyecto
     'core',
 ]
@@ -103,6 +105,20 @@ CORS_ALLOWED_ORIGINS: list[str] = [
 
 # Permite enviar cookies/credenciales en peticiones CORS (útil para sesiones)
 CORS_ALLOW_CREDENTIALS: bool = True
+
+
+# ─── Django REST Framework ───────────────────────────────────────────────────
+# Solo JSON: desactivamos el BrowsableAPI renderer en producción.
+# La autenticación/permisos los manejamos manualmente con @jwt_required
+# (sin usar django.contrib.auth), por eso los dejamos vacíos aquí.
+REST_FRAMEWORK: dict = {
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+    ],
+    'DEFAULT_AUTHENTICATION_CLASSES': [],
+    'DEFAULT_PERMISSION_CLASSES': [],
+    'UNAUTHENTICATED_USER': None,
+}
 
 
 # ─── Internacionalización ────────────────────────────────────────────────────
