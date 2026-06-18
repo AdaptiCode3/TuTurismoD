@@ -14,6 +14,9 @@ Estructura:
   /api/v1/places/municipios/    → Municipios únicos
   /api/v1/places/<id>/          → Detalle de un lugar
 
+  /api/v1/core/events/           → Lista de eventos
+  /api/v1/core/events/<id>/     → Detalle de un evento
+
   /api/v1/restaurants/          → Lista de restaurantes (+ ?lat&lng para geo)
   /api/v1/restaurants/<id>/     → Detalle de un restaurante
 
@@ -35,6 +38,8 @@ from core.views.restaurants import (
     RestaurantDetailAPIView,
     RestaurantListAPIView,
 )
+from core.views.categories import CategoryListAPIView
+from core.views.events import EventDetailAPIView, EventListAPIView
 
 app_name = "core"
 
@@ -61,6 +66,15 @@ urlpatterns = [
     path("places/municipios/",         PlaceMunicipiosAPIView.as_view(), name="place_municipios"),
     # GET /api/v1/core/places/<place_id>/
     path("places/<str:place_id>/",     PlaceDetailAPIView.as_view(),     name="place_detail"),
+
+    # GET /api/v1/core/categorias/
+    path("categorias/", CategoryListAPIView.as_view(), name="category_list"),
+
+    # ── Eventos ───────────────────────────────────────────────────────── #
+    # GET /api/v1/core/events/
+    path("events/",                  EventListAPIView.as_view(),   name="event_list"),
+    # GET /api/v1/core/events/<event_id>/
+    path("events/<str:event_id>/",   EventDetailAPIView.as_view(), name="event_detail"),
 
     # ── Restaurantes ──────────────────────────────────────────────────── #
     # GET /api/v1/core/restaurants/

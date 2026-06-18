@@ -94,14 +94,17 @@ MONGO_DB_NAME: str = os.getenv('MONGO_DB_NAME', 'tuturismo_db')
 
 # ─── CORS ────────────────────────────────────────────────────────────────────
 # Orígenes permitidos para peticiones cross-origin del frontend.
-# En producción reemplaza estos valores por los dominios reales.
-CORS_ALLOWED_ORIGINS: list[str] = [
-    origin.strip()
-    for origin in os.getenv(
-        'CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:5173'
-    ).split(',')
-    if origin.strip()
-]
+# Si estamos en desarrollo (DEBUG=True), permitimos todo para evitar bloqueos de CORS.
+if DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = True
+else:
+    CORS_ALLOWED_ORIGINS: list[str] = [
+        origin.strip()
+        for origin in os.getenv(
+            'CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:5173'
+        ).split(',')
+        if origin.strip()
+    ]
 
 # Permite enviar cookies/credenciales en peticiones CORS (útil para sesiones)
 CORS_ALLOW_CREDENTIALS: bool = True
