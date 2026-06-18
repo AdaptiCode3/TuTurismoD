@@ -192,12 +192,7 @@ class RestaurantRepository(BaseRepository[RestaurantDocument]):
                 precio_rango=str(
                     document.get("precio_rango") or document.get("price_range") or ""
                 ),
-                imagen_url=str(
-                    document.get("imagen_url")
-                    or document.get("image_url")
-                    or document.get("imagen")
-                    or ""
-                ),
+                imagen_url=self._parse_imagen(document),
                 coordenadas=coordenadas,
                 calificacion=calificacion,
                 activo=bool(document.get("activo", True)),
@@ -209,6 +204,21 @@ class RestaurantRepository(BaseRepository[RestaurantDocument]):
                 "Error al mapear RestaurantDocument id=%s: %s", doc_id, exc
             )
             return RestaurantDocument(id=doc_id)
+
+    def _parse_imagen(self, document: dict[str, Any]) -> str:
+        raw_imagen = str(document.get("imagen_url") or document.get("image_url") or document.get("imagen") or "")
+        if raw_imagen:
+            return raw_imagen
+        raw_imagenes = document.get("imagenes")
+        if isinstance(raw_imagenes, str):
+            import json
+            try:
+                lista_img = json.loads(raw_imagenes)
+                if isinstance(lista_img, list) and len(lista_img) > 0:
+                    return str(lista_img[0])
+            except json.JSONDecodeError:
+                pass
+        return ""
 
     # ------------------------------------------------------------------ #
     # Consulta geoespacial

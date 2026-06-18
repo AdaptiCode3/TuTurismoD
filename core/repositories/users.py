@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 # --------------------------------------------------------------------------- #
 # Nombre de la colección en MongoDB — colección real en producción
 # --------------------------------------------------------------------------- #
-USERS_COLLECTION_NAME = "usuarios"
+USERS_COLLECTION_NAME = "users"
 
 # Regex de validación de email (RFC 5322 simplificado)
 _EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")

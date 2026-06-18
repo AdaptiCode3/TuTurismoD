@@ -126,19 +126,32 @@ class PlaceRepository(BaseRepository[PlaceDocument]):
 
         try:
             # --- Coordenadas: validación de estructura anidada ---
-            raw_coords = document.get("coordenadas") or document.get("coordinates")
             coordenadas: Optional[dict[str, float]] = None
-            if isinstance(raw_coords, dict):
-                try:
-                    coordenadas = {
-                        "lat": float(raw_coords.get("lat", 0.0)),
-                        "lng": float(raw_coords.get("lng", raw_coords.get("lon", 0.0))),
-                    }
-                except (TypeError, ValueError):
-                    logger.warning(
-                        "Coordenadas malformadas en documento id=%s, ignorando.", doc_id
-                    )
-                    coordenadas = None
+            raw_ubicacion = document.get("ubicacion")
+            if isinstance(raw_ubicacion, dict):
+                raw_coords_list = raw_ubicacion.get("coordinates")
+                if isinstance(raw_coords_list, list) and len(raw_coords_list) >= 2:
+                    try:
+                        coordenadas = {
+                            "lng": float(raw_coords_list[0]),
+                            "lat": float(raw_coords_list[1]),
+                        }
+                    except (TypeError, ValueError):
+                        pass
+
+            if not coordenadas:
+                raw_coords = document.get("coordenadas") or document.get("coordinates")
+                if isinstance(raw_coords, dict):
+                    try:
+                        coordenadas = {
+                            "lat": float(raw_coords.get("lat", 0.0)),
+                            "lng": float(raw_coords.get("lng", raw_coords.get("lon", 0.0))),
+                        }
+                    except (TypeError, ValueError):
+                        logger.warning(
+                            "Coordenadas malformadas en documento id=%s, ignorando.", doc_id
+                        )
+                        coordenadas = None
 
             # --- Tags: acepta lista o string separado por comas ---
             raw_tags = document.get("tags", [])
@@ -165,12 +178,7 @@ class PlaceRepository(BaseRepository[PlaceDocument]):
                     or document.get("direccion_completa")
                     or ""
                 ),
-                imagen_url=str(
-                    document.get("imagen_url")
-                    or document.get("image_url")
-                    or document.get("imagen")
-                    or ""
-                ),
+                imagen_url=self._parse_imagen(document),
                 coordenadas=coordenadas,
                 activo=bool(document.get("activo", True)),
                 tags=tags,
@@ -184,7 +192,20 @@ class PlaceRepository(BaseRepository[PlaceDocument]):
                 doc_id,
                 exc,
             )
-            return PlaceDocument(id=doc_id)
+    def _parse_imagen(self, document: dict[str, Any]) -> str:
+        raw_imagen = str(document.get("imagen_url") or document.get("image_url") or document.get("imagen") or "")
+        if raw_imagen:
+            return raw_imagen
+        raw_imagenes = document.get("imagenes")
+        if isinstance(raw_imagenes, str):
+            import json
+            try:
+                lista_img = json.loads(raw_imagenes)
+                if isinstance(lista_img, list) and len(lista_img) > 0:
+                    return str(lista_img[0])
+            except json.JSONDecodeError:
+                pass
+        return ""
 
     # ------------------------------------------------------------------ #
     # Consultas específicas del dominio turístico
