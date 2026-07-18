@@ -304,3 +304,25 @@ class RestaurantRepository(BaseRepository[RestaurantDocument]):
             limit=limit,
             sort_by="nombre",
         )
+
+    def create_restaurant(self, data: dict[str, Any]) -> Optional[RestaurantDocument]:
+        """Inserta un nuevo restaurante. Devuelve el documento creado o None."""
+        from datetime import datetime, timezone
+        data.setdefault("activo", True)
+        data.setdefault("created_at", datetime.now(tz=timezone.utc).isoformat())
+        new_id = self.insert(data)
+        return self.get_by_id(new_id) if new_id else None
+
+    def update_restaurant(self, restaurant_id: str, data: dict[str, Any]) -> Optional[RestaurantDocument]:
+        """Actualiza campos de un restaurante. Devuelve el documento actualizado o None."""
+        protected = {"_id", "id", "created_at"}
+        updates = {k: v for k, v in data.items() if k not in protected}
+        if not updates:
+            return self.get_by_id(restaurant_id)
+        self.update(restaurant_id, updates)
+        return self.get_by_id(restaurant_id)
+
+    def delete_restaurant(self, restaurant_id: str) -> bool:
+        """Soft-delete: marca activo=False."""
+        return self.update(restaurant_id, {"activo": False})
+

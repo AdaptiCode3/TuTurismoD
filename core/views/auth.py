@@ -284,27 +284,35 @@ def refresh_token(request: HttpRequest) -> JsonResponse:
 
 
 # --------------------------------------------------------------------------- #
-# GET /api/v1/auth/me/
+# GET/PUT/PATCH /api/v1/auth/me/
 # --------------------------------------------------------------------------- #
 
+@csrf_exempt
+@require_http_methods(["GET", "PUT", "PATCH"])
 @jwt_required
 def me(request: HttpRequest) -> JsonResponse:
     """
-    Devuelve el perfil del usuario actualmente autenticado.
+    Devuelve o actualiza el perfil del usuario actualmente autenticado.
 
     Requiere header: Authorization: Bearer <access_token>
 
     Responses:
         200 OK  → Datos del usuario (sin password).
-        401     → Token ausente, inválido o expirado (manejado por @jwt_required).
+        400     → JSON malformado (en PUT/PATCH).
+        401     → Token ausente, inválido o expirado.
     """
-    # request.user_payload fue inyectado por @jwt_required
     payload: dict[str, Any] = request.user_payload  # type: ignore[attr-defined]
     user_id: str = payload.get("id", "")
 
     try:
         repo = UserRepository()
-        user = repo.get_by_id(user_id)
+        if request.method in ["PUT", "PATCH"]:
+            data, error_response = _parse_json_body(request)
+            if error_response:
+                return error_response
+            user = repo.update_profile(user_id, data)
+        else:
+            user = repo.get_by_id(user_id)
     except RuntimeError as exc:
         logger.critical("MongoDB no disponible en /me: %s", exc)
         return JsonResponse({"error": "Servicio no disponible."}, status=503)
@@ -316,3 +324,135 @@ def me(request: HttpRequest) -> JsonResponse:
         )
 
     return JsonResponse(user.to_safe_dict(), status=200)
+
+
+# --------------------------------------------------------------------------- #
+# POST /api/v1/auth/register/
+# --------------------------------------------------------------------------- #
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def register(request: HttpRequest) -> JsonResponse:
+    """
+    Registra un nuevo usuario en el sistema.
+
+    Request body (JSON):
+        {
+            "email":    "turista@jalisco.mx",
+            "password": "mi_contraseña_segura",
+            "nombre":   "Juan Pérez",
+            "rol":      "turista"
+        }
+    """
+    data, error_response = _parse_json_body(request)
+    if error_response:
+        return error_response
+
+    email: str = str(data.get("email", "")).strip().lower()
+    password: str = str(data.get("password", "")).strip()
+    nombre: str = str(data.get("nombre", "")).strip()
+    if "apellido" in data and data["apellido"]:
+        apellido: str = str(data["apellido"]).strip()
+        if apellido:
+            nombre = f"{nombre} {apellido}".strip()
+    telefono: str = str(data.get("telefono", "")).strip()
+    rol: str = str(data.get("rol", "turista")).strip().lower()
+
+    if rol not in {"turista", "admin"}:
+        rol = "turista"
+
+    missing: list[str] = []
+    if not email:
+        missing.append("email")
+    if not password:
+        missing.append("password")
+    if not nombre:
+        missing.append("nombre")
+
+    if missing:
+        return JsonResponse(
+            {
+                "error": "Campos obligatorios faltantes.",
+                "detail": f"Los siguientes campos son requeridos: {missing}",
+            },
+            status=400,
+        )
+
+    try:
+        repo = UserRepository()
+        if repo.email_exists(email):
+            return JsonResponse(
+                {
+                    "error": "El email ya está registrado.",
+                    "detail": "Ya existe una cuenta asociada a este correo electrónico.",
+                },
+                status=400,
+            )
+
+        password_hash = PasswordService.hash(password)
+        new_id = repo.create_user(
+            email=email,
+            password_hash=password_hash,
+            nombre=nombre,
+            rol=rol,
+            telefono=telefono,
+        )
+        if not new_id:
+            return JsonResponse(
+                {
+                    "error": "Error de registro.",
+                    "detail": "No se pudo crear la cuenta de usuario.",
+                },
+                status=400,
+            )
+
+        user = repo.get_by_id(new_id)
+        if user is None:
+            return JsonResponse(
+                {
+                    "error": "Error interno.",
+                    "detail": "El usuario fue creado pero no se pudo recuperar de la base de datos.",
+                },
+                status=500,
+            )
+    except RuntimeError as exc:
+        logger.critical("MongoDB no disponible en register: %s", exc)
+        return JsonResponse(
+            {
+                "error": "Servicio no disponible.",
+                "detail": "La base de datos no está accesible en este momento.",
+            },
+            status=503,
+        )
+
+    token_payload: dict[str, Any] = {
+        "id":    user.id,
+        "email": user.email,
+        "rol":   user.rol,
+    }
+
+    access_token: str  = JWTService.encode(token_payload)
+    refresh_token: str = JWTService.encode_refresh(user.id)  # type: ignore[arg-type]
+
+    try:
+        repo.update_last_login(user.id)  # type: ignore[arg-type]
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("No se pudo actualizar last_login para user_id='%s': %s", user.id, exc)
+
+    logger.info("Registro exitoso: user_id='%s', rol='%s'", user.id, user.rol)
+
+    return JsonResponse(
+        {
+            "access_token":  access_token,
+            "refresh_token": refresh_token,
+            "token_type":    "Bearer",
+            "expires_in":    86_400,
+            "user": {
+                "id":     user.id,
+                "email":  user.email,
+                "rol":    user.rol,
+                "nombre": user.nombre,
+            },
+        },
+        status=201,
+    )

@@ -394,3 +394,29 @@ class PlaceRepository(BaseRepository[PlaceDocument]):
                 lat, lng, max_distance, exc,
             )
             return []
+
+    # ------------------------------------------------------------------ #
+    # Operaciones de escritura (admin)
+    # ------------------------------------------------------------------ #
+
+    def create_place(self, data: dict[str, Any]) -> Optional[PlaceDocument]:
+        """Inserta un nuevo lugar. Devuelve el documento creado o None."""
+        from datetime import datetime, timezone
+        data.setdefault("activo", True)
+        data.setdefault("created_at", datetime.now(tz=timezone.utc).isoformat())
+        new_id = self.insert(data)
+        return self.get_by_id(new_id) if new_id else None
+
+    def update_place(self, place_id: str, data: dict[str, Any]) -> Optional[PlaceDocument]:
+        """Actualiza campos de un lugar. Devuelve el documento actualizado o None."""
+        protected = {"_id", "id", "created_at"}
+        updates = {k: v for k, v in data.items() if k not in protected}
+        if not updates:
+            return self.get_by_id(place_id)
+        self.update(place_id, updates)
+        return self.get_by_id(place_id)
+
+    def delete_place(self, place_id: str) -> bool:
+        """Soft-delete: marca activo=False. Devuelve True si tuvo efecto."""
+        return self.update(place_id, {"activo": False})
+

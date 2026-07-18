@@ -104,3 +104,25 @@ class EventRepository(BaseRepository[EventDocument]):
             except json.JSONDecodeError:
                 pass
         return ""
+
+    def create_event(self, data: dict[str, Any]) -> Optional[EventDocument]:
+        """Inserta un nuevo evento. Devuelve el documento creado o None."""
+        from datetime import datetime, timezone
+        data.setdefault("activo", True)
+        data.setdefault("created_at", datetime.now(tz=timezone.utc).isoformat())
+        new_id = self.insert(data)
+        return self.get_by_id(new_id) if new_id else None
+
+    def update_event(self, event_id: str, data: dict[str, Any]) -> Optional[EventDocument]:
+        """Actualiza campos de un evento. Devuelve el documento actualizado o None."""
+        protected = {"_id", "id", "created_at"}
+        updates = {k: v for k, v in data.items() if k not in protected}
+        if not updates:
+            return self.get_by_id(event_id)
+        self.update(event_id, updates)
+        return self.get_by_id(event_id)
+
+    def delete_event(self, event_id: str) -> bool:
+        """Soft-delete: marca activo=False."""
+        return self.update(event_id, {"activo": False})
+

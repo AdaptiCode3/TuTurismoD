@@ -314,6 +314,8 @@ class UserRepository(BaseRepository[UserDocument]):
         password_hash: str,
         nombre: str = "",
         rol: str = "turista",
+        telefono: Optional[str] = None,
+        preferences: Optional[dict[str, Any]] = None,
     ) -> Optional[str]:
         """
         Registra un nuevo usuario en la colección.
@@ -340,15 +342,20 @@ class UserRepository(BaseRepository[UserDocument]):
             )
             return None
 
+        prefs = preferences or {}
+        if telefono:
+            prefs["telefono"] = telefono.strip()
+
         user_doc = {
             "email": email,
             "password_hash": password_hash,
             "nombre": nombre.strip(),
+            "telefono": telefono.strip() if telefono else "",
             "rol": rol,
             "activo": True,
             "created_at": datetime.now(tz=timezone.utc).isoformat(),
             "last_login": None,
-            "preferences": {},
+            "preferences": prefs,
         }
 
         new_id = self.insert(user_doc)
@@ -358,3 +365,38 @@ class UserRepository(BaseRepository[UserDocument]):
                 new_id, email, rol,
             )
         return new_id
+
+    def update_profile(
+        self, user_id: str, updates: dict[str, Any]
+    ) -> Optional[UserDocument]:
+        """
+        Actualiza el perfil de un usuario (nombre, preferencias, etc.).
+
+        Filtra campos protegidos (id, email, password_hash, rol, activo, created_at)
+        y actualiza únicamente los campos seguros en MongoDB.
+
+        Args:
+            user_id: String del ObjectId del usuario.
+            updates: Diccionario con los campos a actualizar.
+
+        Returns:
+            UserDocument actualizado si se encontró el usuario, o None.
+        """
+        allowed_keys = {
+            "nombre",
+            "preferences",
+            "preferencias",
+            "name",
+            "telefono",
+            "phone",
+        }
+        filtered_updates = {k: v for k, v in updates.items() if k in allowed_keys}
+
+        if not filtered_updates:
+            return self.get_by_id(user_id)
+
+        if "nombre" in filtered_updates and isinstance(filtered_updates["nombre"], str):
+            filtered_updates["nombre"] = filtered_updates["nombre"].strip()
+
+        self.update(user_id, filtered_updates)
+        return self.get_by_id(user_id)

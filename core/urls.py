@@ -27,7 +27,17 @@ usan el prefijo /api/v1/core/.
 from django.urls import path
 
 from core.views import health_check
-from core.views.auth import login, me, refresh_token
+from core.views.auth import login, me, refresh_token, register
+from core.views.favorites import favorites_delete, favorites_list_create
+from core.views.admin import resource_create, resource_update, resource_delete
+from core.views.stats import admin_stats
+from core.views.backup import backup_export
+from core.views.notifications import (
+    notifications_list_create_delete,
+    notification_mark_all_read,
+    notification_mark_read,
+    notification_detail,
+)
 from core.views.places import (
     PlaceCategoriasAPIView,
     PlaceDetailAPIView,
@@ -40,6 +50,8 @@ from core.views.restaurants import (
 )
 from core.views.categories import CategoryListAPIView
 from core.views.events import EventDetailAPIView, EventListAPIView
+from core.views.users import users_list_create, user_detail
+from core.views.password_recovery import send_recovery_code, verify_recovery_code, reset_password
 
 app_name = "core"
 
@@ -50,11 +62,21 @@ urlpatterns = [
 
     # ── Autenticación JWT ─────────────────────────────────────────────── #
     # POST /api/v1/core/auth/login/
-    path("auth/login/",   login,         name="auth_login"),
+    path("auth/login/",    login,         name="auth_login"),
+    # POST /api/v1/core/auth/register/
+    path("auth/register/", register,      name="auth_register"),
     # POST /api/v1/core/auth/refresh/
-    path("auth/refresh/", refresh_token, name="auth_refresh"),
-    # GET  /api/v1/core/auth/me/
-    path("auth/me/",      me,            name="auth_me"),
+    path("auth/refresh/",  refresh_token, name="auth_refresh"),
+    # GET/PUT/PATCH  /api/v1/core/auth/me/
+    path("auth/me/",       me,            name="auth_me"),
+
+    # POST /api/v1/core/auth/password/send-code/ (y opcional sin barra)
+    path("auth/password/send-code",   send_recovery_code,   name="password_send_code"),
+    path("auth/password/send-code/",  send_recovery_code,   name="password_send_code_slash"),
+    path("auth/password/verify-code", verify_recovery_code, name="password_verify_code"),
+    path("auth/password/verify-code/", verify_recovery_code, name="password_verify_code_slash"),
+    path("auth/password/reset",       reset_password,       name="password_reset"),
+    path("auth/password/reset/",      reset_password,       name="password_reset_slash"),
 
     # ── Lugares turísticos ────────────────────────────────────────────── #
     # GET /api/v1/core/places/
@@ -82,4 +104,32 @@ urlpatterns = [
     path("restaurants/",                        RestaurantListAPIView.as_view(),   name="restaurant_list"),
     # GET /api/v1/core/restaurants/<restaurant_id>/
     path("restaurants/<str:restaurant_id>/",    RestaurantDetailAPIView.as_view(), name="restaurant_detail"),
+
+    # ── Favoritos ────────────────────────────────────────────────────── #
+    # GET  /api/v1/core/favorites/                → Lista favoritos del usuario
+    # POST /api/v1/core/favorites/                → Agrega un favorito
+    path("favorites/",                           favorites_list_create,            name="favorites_list_create"),
+    # DELETE /api/v1/core/favorites/<referencia_id>/  → Elimina un favorito
+    path("favorites/<str:referencia_id>/",       favorites_delete,                 name="favorites_delete"),
+
+    # ── Notificaciones ───────────────────────────────────────────────── #
+    # GET/POST/DELETE /api/v1/core/notifications/
+    path("notifications/",                                 notifications_list_create_delete, name="notifications_list_create_delete"),
+    # PATCH /api/v1/core/notifications/read-all/ (debe ir antes de <notification_id>/)
+    path("notifications/read-all/",                        notification_mark_all_read,       name="notification_mark_all_read"),
+    # PATCH /api/v1/core/notifications/<id>/read/
+    path("notifications/<str:notification_id>/read/",    notification_mark_read,           name="notification_mark_read"),
+    # DELETE /api/v1/core/notifications/<id>/
+    path("notifications/<str:notification_id>/",          notification_detail,              name="notification_detail"),
+
+    # ── Admin: rutas fijas antes de las paramétricas ─────────────── #
+    path("admin/stats/",                                   admin_stats,             name="admin_stats"),
+    path("admin/users/",                                   users_list_create,       name="admin_users_list_create"),
+    path("admin/users/<str:user_id>/",                     user_detail,             name="admin_user_detail"),
+    path("admin/backup/<str:resource>/",                   backup_export,           name="admin_backup_export"),
+
+    # ── Admin CRUD genérico (sólo rol admin) ─────────────────────── #
+    path("admin/<str:resource>/",                          resource_create,         name="admin_resource_create"),
+    path("admin/<str:resource>/<str:resource_id>/",        resource_update,         name="admin_resource_update"),
+    path("admin/<str:resource>/<str:resource_id>/delete/", resource_delete,         name="admin_resource_delete"),
 ]

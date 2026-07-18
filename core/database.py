@@ -15,7 +15,7 @@ El Singleton garantiza que, sin importar cuántas veces se llame a
 MongoDBClient(), siempre se devuelva la misma instancia ya conectada,
 compartiendo el mismo pool de conexiones de forma thread-safe.
 
-Referencia: https://www.mongodb.com/docs/drivers/pymongo/#connect-to-mongodb
+
 """
 from __future__ import annotations
 
@@ -39,9 +39,7 @@ class MongoDBClient:
         collection = db["destinos"]
     """
 
-    # ------------------------------------------------------------------ #
-    # Atributos de clase — compartidos por TODAS las instancias (Singleton)
-    # ------------------------------------------------------------------ #
+    
     _instance: Optional["MongoDBClient"] = None
     _client: Optional[MongoClient] = None
     _database: Optional[Database] = None
