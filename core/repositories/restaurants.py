@@ -21,6 +21,7 @@ from typing import Any, Optional
 from pymongo.errors import PyMongoError
 
 from core.repositories.base import BaseRepository
+from core.repositories.geo_resolver import resolve_municipio
 
 logger = logging.getLogger(__name__)
 
@@ -170,23 +171,26 @@ class RestaurantRepository(BaseRepository[RestaurantDocument]):
                 except (TypeError, ValueError):
                     pass
 
+            nombre_clean = str(document.get("nombre") or document.get("name") or "")
+            dir_clean = str(document.get("direccion") or document.get("address") or "")
+            desc_clean = str(document.get("descripcion") or document.get("description") or "")
+            resolved_muni = resolve_municipio(
+                existing_value=document.get("municipio") or document.get("municipality"),
+                coordenadas=coordenadas,
+                direccion=dir_clean,
+                nombre=nombre_clean,
+                descripcion=desc_clean,
+            )
+
             return RestaurantDocument(
                 id=doc_id,
-                nombre=str(
-                    document.get("nombre") or document.get("name") or ""
-                ),
-                municipio=str(
-                    document.get("municipio") or document.get("municipality") or ""
-                ),
+                nombre=nombre_clean,
+                municipio=resolved_muni,
                 categoria=str(
                     document.get("categoria") or document.get("category") or ""
                 ),
-                descripcion=str(
-                    document.get("descripcion") or document.get("description") or ""
-                ),
-                direccion=str(
-                    document.get("direccion") or document.get("address") or ""
-                ),
+                descripcion=desc_clean,
+                direccion=dir_clean,
                 telefono=str(document.get("telefono") or document.get("phone") or ""),
                 horario=str(document.get("horario") or document.get("hours") or ""),
                 precio_rango=str(

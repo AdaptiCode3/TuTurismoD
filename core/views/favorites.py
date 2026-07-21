@@ -22,7 +22,7 @@ from django.http import HttpRequest, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from core.repositories.favorites import FavoriteRepository, VALID_TIPOS
+from core.repositories.favorites import FavoriteRepository, VALID_TIPOS, normalize_tipo
 from core.security import jwt_required
 
 logger = logging.getLogger(__name__)
@@ -80,7 +80,7 @@ def favorites_list_create(request: HttpRequest) -> JsonResponse:
         if request.method == "GET":
             tipo_filter = request.GET.get("tipo", "").strip().lower()
 
-            if tipo_filter and tipo_filter in VALID_TIPOS:
+            if tipo_filter and (tipo_filter in VALID_TIPOS or normalize_tipo(tipo_filter) in ("lugar", "restaurante", "evento")):
                 favorites = repo.get_by_user_and_tipo(user_id, tipo_filter)
             else:
                 favorites = repo.get_by_user(user_id)
@@ -108,7 +108,8 @@ def favorites_list_create(request: HttpRequest) -> JsonResponse:
                 {"error": "Campo 'tipo' requerido.", "detail": f"Debe ser uno de: {sorted(VALID_TIPOS)}"},
                 status=400,
             )
-        if tipo not in VALID_TIPOS:
+        norm_tipo = normalize_tipo(tipo)
+        if tipo not in VALID_TIPOS and norm_tipo not in ("lugar", "restaurante", "evento"):
             return JsonResponse(
                 {"error": "Tipo de recurso inválido.", "detail": f"Los tipos válidos son: {sorted(VALID_TIPOS)}"},
                 status=400,
@@ -131,7 +132,7 @@ def favorites_list_create(request: HttpRequest) -> JsonResponse:
                 status=200,
             )
 
-        favorite = repo.add_favorite(user_id=user_id, tipo=tipo, referencia_id=referencia_id)
+        favorite = repo.add_favorite(user_id=user_id, tipo=norm_tipo, referencia_id=referencia_id)
         if favorite is None:
             return JsonResponse(
                 {"error": "No se pudo agregar el favorito.", "detail": "Error interno al insertar en MongoDB."},

@@ -135,3 +135,20 @@ USE_TZ: bool = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+
+# ─── Configuración de Correo Electrónico (Resend / SMTP / Console) ───────────
+# Prioriza variables de entorno para no exponer secretos en código.
+# Si se configura EMAIL_HOST, usa SMTP de Resend/Brevo; de lo contrario, por seguridad y dev usa consola.
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.resend.com")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", 587))
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "True").lower() in ("true", "1", "yes")
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "resend")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "Tu-Turismo <onboarding@resend.dev>")
+
+if EMAIL_HOST_PASSWORD and EMAIL_HOST:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+else:
+    # Fallback seguro a consola para entornos de desarrollo sin API key configurada
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"

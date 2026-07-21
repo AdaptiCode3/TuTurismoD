@@ -88,10 +88,11 @@ def send_recovery_code(request: HttpRequest) -> JsonResponse:
         try:
             subject = "Código de recuperación de contraseña - Tu-Turismo"
             message = f"Hola {user.nombre or 'Turista'},\n\nTu código de verificación para restablecer tu contraseña es: {code}\n\nEste código expira en 15 minutos.\nSi no solicitaste esto, puedes ignorar este correo.\n\nSaludos,\nEl equipo de Tu-Turismo"
-            from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "soporte@tuturismo.mx")
-            send_mail(subject, message, from_email, [email], fail_silently=True)
+            from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "Tu-Turismo <onboarding@resend.dev>")
+            send_mail(subject, message, from_email, [email], fail_silently=False)
+            logger.info(f"✉️ Correo de recuperación enviado con éxito a {email}")
         except Exception as mail_exc:
-            logger.warning(f"No se pudo enviar correo por SMTP a {email}: {mail_exc}")
+            logger.warning(f"⚠️ No se pudo enviar correo por SMTP a {email}: {mail_exc}. El código está disponible en consola arriba.")
 
         return JsonResponse({"success": True, "message": "Código enviado correctamente. Revisa tu correo o consola de logs."}, status=200)
 

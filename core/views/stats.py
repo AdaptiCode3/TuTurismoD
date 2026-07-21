@@ -78,3 +78,27 @@ def admin_stats(request: HttpRequest) -> JsonResponse:
             "alertas_pendientes": 0,
         },
     }, status=200)
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+@jwt_required
+def admin_spatial_density(request: HttpRequest) -> JsonResponse:
+    """
+    GET /api/v1/core/admin/spatial-density/
+
+    Requiere rol admin. Devuelve agregación por municipio para el mapa territorial coroplético.
+    """
+    payload = getattr(request, "user_payload", {})
+    if payload.get("rol") != "admin":
+        return JsonResponse({"error": "Acceso denegado.", "detail": "Se requiere rol admin."}, status=403)
+
+    from core.repositories.places import PlaceRepository
+    try:
+        repo = PlaceRepository()
+        data = repo.get_spatial_density_by_municipio()
+    except RuntimeError as exc:
+        return JsonResponse({"error": "Servicio no disponible.", "detail": str(exc)}, status=503)
+
+    return JsonResponse({"success": True, "data": data, "count": len(data)}, status=200)
+

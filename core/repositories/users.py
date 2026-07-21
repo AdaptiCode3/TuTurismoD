@@ -68,6 +68,9 @@ class UserDocument:
     email: str = ""
     password_hash: str = ""          # ← mapea al campo 'password' en MongoDB
     nombre: str = ""
+    apellido: str = ""
+    telefono: str = ""
+    avatar: str = ""
     rol: str = "turista"             # 'admin' | 'turista'
     activo: bool = True
     created_at: Optional[str] = None
@@ -86,6 +89,12 @@ class UserDocument:
         """
         data = asdict(self)
         data.pop("password_hash", None)
+        if not data.get("telefono") and isinstance(self.preferences, dict):
+            data["telefono"] = self.preferences.get("telefono", "")
+        if not data.get("apellido") and isinstance(self.preferences, dict):
+            data["apellido"] = self.preferences.get("apellido", "")
+        if not data.get("avatar") and isinstance(self.preferences, dict):
+            data["avatar"] = self.preferences.get("avatar") or self.preferences.get("imagen_url", "")
         return data
 
     def __repr__(self) -> str:
@@ -155,7 +164,11 @@ class UserRepository(BaseRepository[UserDocument]):
             raw_rol = str(document.get("rol") or document.get("role") or "turista").lower()
             rol = raw_rol if raw_rol in ROLES_VALIDOS else "turista"
 
-            # Nombre: aceptar variantes
+            # Preferences: solo aceptar dict, ignorar si es otro tipo
+            raw_prefs = document.get("preferences") or document.get("preferencias") or {}
+            preferences: dict = raw_prefs if isinstance(raw_prefs, dict) else {}
+
+            # Nombre y Apellido: aceptar variantes
             nombre = str(
                 document.get("nombre")
                 or document.get("name")
@@ -163,10 +176,23 @@ class UserRepository(BaseRepository[UserDocument]):
                 or document.get("display_name")
                 or ""
             ).strip()
-
-            # Preferences: solo aceptar dict, ignorar si es otro tipo
-            raw_prefs = document.get("preferences") or document.get("preferencias") or {}
-            preferences = raw_prefs if isinstance(raw_prefs, dict) else {}
+            apellido = str(
+                document.get("apellido")
+                or preferences.get("apellido", "")
+                or ""
+            ).strip()
+            telefono = str(
+                document.get("telefono")
+                or document.get("phone")
+                or preferences.get("telefono", "")
+                or ""
+            ).strip()
+            avatar = str(
+                document.get("avatar")
+                or document.get("imagen_url")
+                or preferences.get("avatar", "")
+                or ""
+            ).strip()
 
             # Timestamps: convertir a string si son datetime de Python
             def _ts_to_str(val: Any) -> Optional[str]:
@@ -188,6 +214,9 @@ class UserRepository(BaseRepository[UserDocument]):
                     or ""
                 ),
                 nombre=nombre,
+                apellido=apellido,
+                telefono=telefono,
+                avatar=avatar,
                 rol=rol,
                 activo=bool(document.get("activo", True)),
                 created_at=_ts_to_str(
@@ -384,19 +413,45 @@ class UserRepository(BaseRepository[UserDocument]):
         """
         allowed_keys = {
             "nombre",
+            "apellido",
             "preferences",
             "preferencias",
             "name",
             "telefono",
             "phone",
+            "avatar",
+            "imagen_url",
         }
         filtered_updates = {k: v for k, v in updates.items() if k in allowed_keys}
 
-        if not filtered_updates:
-            return self.get_by_id(user_id)
-
         if "nombre" in filtered_updates and isinstance(filtered_updates["nombre"], str):
             filtered_updates["nombre"] = filtered_updates["nombre"].strip()
+        if "apellido" in filtered_updates and isinstance(filtered_updates["apellido"], str):
+            filtered_updates["apellido"] = filtered_updates["apellido"].strip()
+        if "telefono" in filtered_updates and isinstance(filtered_updates["telefono"], str):
+            filtered_updates["telefono"] = filtered_updates["telefono"].strip()
+        if "avatar" in filtered_updates and isinstance(filtered_updates["avatar"], str):
+            filtered_updates["avatar"] = filtered_updates["avatar"].strip()
+
+        # Si solicitan actualización de email
+        if "email" in updates and updates["email"]:
+            new_email = str(updates["email"]).strip().lower()
+            current_user = self.get_by_id(user_id)
+            if current_user and new_email and new_email != current_user.email:
+                if not self.email_exists(new_email):
+                    filtered_updates["email"] = new_email
+
+        # Si solicitan cambio de contraseña
+        if "password" in updates and updates["password"]:
+            from core.services.password import PasswordService
+            pwd_str = str(updates["password"]).strip()
+            if len(pwd_str) >= 6:
+                pwd_hash = PasswordService.hash(pwd_str)
+                filtered_updates["password"] = pwd_hash
+                filtered_updates["password_hash"] = pwd_hash
+
+        if not filtered_updates:
+            return self.get_by_id(user_id)
 
         self.update(user_id, filtered_updates)
         return self.get_by_id(user_id)

@@ -256,3 +256,28 @@ class PlaceMunicipiosAPIView(APIView):
             return _error("Servicio no disponible.", str(exc), status=503)
 
         return _ok(municipios, count=len(municipios))
+
+
+class PlaceTopRatedAPIView(APIView):
+    """
+    GET /api/v1/places/top-rated/
+
+    Devuelve los mejores atractivos turísticos clasificados bajo Puntuación Bayesiana Ponderada.
+    """
+
+    def get(self, request: Request) -> Response:
+        raw_limit = request.query_params.get("limit", "5")
+        try:
+            limit = min(int(raw_limit), 20)
+        except ValueError:
+            limit = 5
+
+        try:
+            repo = PlaceRepository()
+            top_places = repo.get_top_rated(limit=limit)
+        except RuntimeError as exc:
+            return _error("Servicio no disponible.", str(exc), status=503)
+
+        data = [_doc_to_dict(p) for p in top_places]
+        return _ok(data, count=len(data))
+

@@ -31,8 +31,22 @@ logger = logging.getLogger(__name__)
 
 FAVORITES_COLLECTION = "favorites"
 
-# Tipos válidos de recurso que se pueden marcar como favorito
-VALID_TIPOS = {"lugar", "restaurante", "evento"}
+# Tipos válidos de recurso que se pueden marcar como favorito (incluye aliases del frontend)
+VALID_TIPOS = {
+    "lugar", "restaurante", "evento",
+    "turismo", "restaurantes", "museos", "eventos",
+    "place", "restaurant", "event", "favoritos"
+}
+
+
+def normalize_tipo(tipo: str) -> str:
+    """Normaliza alias y formas plurales al tipo canónico de MongoDB."""
+    t = str(tipo or "").strip().lower()
+    if t in ("restaurante", "restaurantes", "restaurant", "comida", "gastronomia"):
+        return "restaurante"
+    if t in ("evento", "eventos", "event", "festival", "concierto"):
+        return "evento"
+    return "lugar"
 
 
 @dataclass
@@ -111,14 +125,15 @@ class FavoriteRepository(BaseRepository[FavoriteDocument]):
 
         Args:
             user_id: ObjectId del usuario.
-            tipo:    "lugar" | "restaurante" | "evento".
+            tipo:    "lugar" | "restaurante" | "evento" (o aliases).
 
         Returns:
             Lista filtrada de FavoriteDocument.
         """
         try:
+            norm_tipo = normalize_tipo(tipo)
             cursor = self._collection.find(
-                {"user_id": user_id, "tipo": tipo}
+                {"user_id": user_id, "tipo": norm_tipo}
             ).sort("created_at", -1)
 
             return [
@@ -165,13 +180,14 @@ class FavoriteRepository(BaseRepository[FavoriteDocument]):
 
         Args:
             user_id:       ObjectId del usuario como string.
-            tipo:          Tipo de recurso ("lugar", "restaurante", "evento").
+            tipo:          Tipo de recurso ("lugar", "restaurante", "evento" o alias).
             referencia_id: ObjectId del recurso a marcar como favorito.
 
         Returns:
             FavoriteDocument recién creado, o None si ya existía o hubo error.
         """
-        if tipo not in VALID_TIPOS:
+        norm_tipo = normalize_tipo(tipo)
+        if tipo not in VALID_TIPOS and norm_tipo not in ("lugar", "restaurante", "evento"):
             logger.warning(
                 "Tipo de favorito inválido: '%s'. Debe ser uno de: %s",
                 tipo, VALID_TIPOS,
@@ -195,7 +211,7 @@ class FavoriteRepository(BaseRepository[FavoriteDocument]):
 
         fav_doc: dict[str, Any] = {
             "user_id":       user_id,
-            "tipo":          tipo,
+            "tipo":          norm_tipo,
             "referencia_id": referencia_id,
             "created_at":    datetime.now(tz=timezone.utc).isoformat(),
         }

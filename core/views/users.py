@@ -141,3 +141,49 @@ def user_detail(request: HttpRequest, user_id: str) -> JsonResponse:
     except RuntimeError as exc:
         logger.critical("MongoDB no disponible en admin user detail: %s", exc)
         return JsonResponse({"success": False, "error": "Servicio no disponible."}, status=503)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@jwt_required
+def send_user_recommendations(request: HttpRequest) -> JsonResponse:
+    """
+    POST /api/v1/core/users/send-recommendations/
+
+    Activa el motor de recomendaciones de Inteligencia Artificial (Random Forest)
+    para el usuario actual autenticado y le envía su itinerario al correo.
+    """
+    payload = getattr(request, "user_payload", {})
+    user_id = getattr(request, "user_id", None) or payload.get("user_id") or payload.get("sub") or payload.get("id")
+    if not user_id:
+        return JsonResponse({"success": False, "error": "Usuario no identificado en el token."}, status=401)
+
+    repo = UserRepository()
+    try:
+        user = repo.get_by_id(user_id)
+        if not user:
+            return JsonResponse({"success": False, "error": "Usuario no encontrado en la base de datos."}, status=404)
+
+        from core.ml.recommendation_engine import RandomForestRecommender
+        from core.services.email_service import EmailRecommendationService
+
+        recommender = RandomForestRecommender()
+        recommendations = recommender.recommend_for_user(user_id, limit=5)
+
+        email_result = EmailRecommendationService.send_ai_recommendations(
+            user_email=user.email,
+            user_name=user.nombre,
+            recommendations=recommendations
+        )
+
+        return JsonResponse({
+            "success": True,
+            "data": recommendations,
+            "email_result": email_result,
+            "message": email_result.get("message", "Recomendaciones procesadas correctamente.")
+        }, status=200)
+
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Error en send_user_recommendations para usuario %s: %s", user_id, exc)
+        return JsonResponse({"success": False, "error": "Error generando recomendaciones.", "detail": str(exc)}, status=500)
+

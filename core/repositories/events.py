@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from core.repositories.base import BaseRepository
+from core.repositories.geo_resolver import resolve_municipio
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,17 @@ class EventRepository(BaseRepository[EventDocument]):
                     except (TypeError, ValueError):
                         pass
 
+            if coordenadas is None:
+                raw_coords = document.get("coordenadas") or document.get("coordinates")
+                if isinstance(raw_coords, dict):
+                    try:
+                        coordenadas = {
+                            "lat": float(raw_coords.get("lat", 0.0)),
+                            "lng": float(raw_coords.get("lng", raw_coords.get("lon", 0.0))),
+                        }
+                    except (TypeError, ValueError):
+                        pass
+
             # Tags: acepta lista o string separado por comas
             raw_tags = document.get("tags", [])
             if isinstance(raw_tags, str):
@@ -61,12 +73,22 @@ class EventRepository(BaseRepository[EventDocument]):
             else:
                 tags = []
 
+            nombre_clean = str(document.get("nombre") or document.get("name") or "")
+            desc_clean = str(document.get("descripcion") or document.get("description") or "")
+            resolved_muni = resolve_municipio(
+                existing_value=document.get("municipio") or document.get("municipality"),
+                coordenadas=coordenadas,
+                direccion="",
+                nombre=nombre_clean,
+                descripcion=desc_clean,
+            )
+
             return EventDocument(
                 id=doc_id,
-                nombre=str(document.get("nombre") or document.get("name") or ""),
-                descripcion=str(document.get("descripcion") or document.get("description") or ""),
+                nombre=nombre_clean,
+                descripcion=desc_clean,
                 categoria=str(document.get("categoria") or document.get("category") or ""),
-                municipio=str(document.get("municipio") or document.get("municipality") or ""),
+                municipio=resolved_muni,
                 # Acepta fecha_inicio, fecha, date o date_start
                 fecha_inicio=str(
                     document.get("fecha_inicio")

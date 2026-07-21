@@ -30,7 +30,7 @@ from core.views import health_check
 from core.views.auth import login, me, refresh_token, register
 from core.views.favorites import favorites_delete, favorites_list_create
 from core.views.admin import resource_create, resource_update, resource_delete
-from core.views.stats import admin_stats
+from core.views.stats import admin_stats, admin_spatial_density
 from core.views.backup import backup_export
 from core.views.notifications import (
     notifications_list_create_delete,
@@ -43,6 +43,7 @@ from core.views.places import (
     PlaceDetailAPIView,
     PlaceListAPIView,
     PlaceMunicipiosAPIView,
+    PlaceTopRatedAPIView,
 )
 from core.views.restaurants import (
     RestaurantDetailAPIView,
@@ -50,7 +51,7 @@ from core.views.restaurants import (
 )
 from core.views.categories import CategoryListAPIView
 from core.views.events import EventDetailAPIView, EventListAPIView
-from core.views.users import users_list_create, user_detail
+from core.views.users import users_list_create, user_detail, send_user_recommendations
 from core.views.password_recovery import send_recovery_code, verify_recovery_code, reset_password
 
 app_name = "core"
@@ -86,6 +87,8 @@ urlpatterns = [
     path("places/categorias/",         PlaceCategoriasAPIView.as_view(), name="place_categorias"),
     # GET /api/v1/core/places/municipios/
     path("places/municipios/",         PlaceMunicipiosAPIView.as_view(), name="place_municipios"),
+    # GET /api/v1/core/places/top-rated/
+    path("places/top-rated/",          PlaceTopRatedAPIView.as_view(),   name="place_top_rated"),
     # GET /api/v1/core/places/<place_id>/
     path("places/<str:place_id>/",     PlaceDetailAPIView.as_view(),     name="place_detail"),
 
@@ -124,9 +127,11 @@ urlpatterns = [
 
     # ── Admin: rutas fijas antes de las paramétricas ─────────────── #
     path("admin/stats/",                                   admin_stats,             name="admin_stats"),
+    path("admin/spatial-density/",                         admin_spatial_density,   name="admin_spatial_density"),
     path("admin/users/",                                   users_list_create,       name="admin_users_list_create"),
     path("admin/users/<str:user_id>/",                     user_detail,             name="admin_user_detail"),
     path("admin/backup/<str:resource>/",                   backup_export,           name="admin_backup_export"),
+    path("users/send-recommendations/",                    send_user_recommendations, name="user_send_recommendations"),
 
     # ── Admin CRUD genérico (sólo rol admin) ─────────────────────── #
     path("admin/<str:resource>/",                          resource_create,         name="admin_resource_create"),
