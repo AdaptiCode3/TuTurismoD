@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import functools
 import logging
+import time
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 
@@ -266,3 +268,50 @@ def jwt_required(
 
     # @jwt_required(roles=[...])  (con paréntesis)
     return decorator
+
+
+# --------------------------------------------------------------------------- #
+# 4. Rate Limiter (Protección Anti-Fuerza Bruta)
+# --------------------------------------------------------------------------- #
+
+_RATE_LIMIT_CACHE: dict[str, list[float]] = {}
+_RATE_LIMIT_LOCK = threading.Lock()
+
+
+def rate_limit(max_requests: int = 5, window_seconds: int = 60) -> Callable:
+    """
+    Decorador para limitar peticiones por IP en endpoints sensibles (ej. login/register).
+    Devuelve 429 Too Many Requests si se excede el límite en la ventana de tiempo.
+    """
+    def decorator(func: Callable) -> Callable:
+        @functools.wraps(func)
+        def wrapper(request: HttpRequest, *args: Any, **kwargs: Any) -> JsonResponse:
+            # Obtener IP real del cliente considerando proxys/Cloudflare/Render
+            x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
+            if x_forwarded_for:
+                ip = x_forwarded_for.split(",")[0].strip()
+            else:
+                ip = request.META.get("REMOTE_ADDR", "unknown_ip")
+
+            cache_key = f"{func.__name__}:{ip}"
+            now = time.time()
+
+            with _RATE_LIMIT_LOCK:
+                # Limpiar timestamps expirados de esta clave
+                timestamps = _RATE_LIMIT_CACHE.get(cache_key, [])
+                valid_timestamps = [t for t in timestamps if now - t < window_seconds]
+
+                if len(valid_timestamps) >= max_requests:
+                    logger.warning("🚫 Rate limit excedido para IP %s en endpoint %s", ip, func.__name__)
+                    return JsonResponse({
+                        "error": "Demasiados intentos.",
+                        "detail": f"Has superado el límite de {max_requests} intentos permitidos. Por favor, espera unos segundos e inténtalo de nuevo."
+                    }, status=429)
+
+                valid_timestamps.append(now)
+                _RATE_LIMIT_CACHE[cache_key] = valid_timestamps
+
+            return func(request, *args, **kwargs)
+        return wrapper
+    return decorator
+

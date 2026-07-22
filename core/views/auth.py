@@ -24,7 +24,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from core.repositories.users import UserRepository
-from core.security import JWTService, PasswordService, jwt_required
+from core.security import JWTService, PasswordService, jwt_required, rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +63,7 @@ def _parse_json_body(request: HttpRequest) -> tuple[dict[str, Any], JsonResponse
 
 @csrf_exempt
 @require_http_methods(["POST"])
+@rate_limit(max_requests=5, window_seconds=60)
 def login(request: HttpRequest) -> JsonResponse:
     """
     Autentica a un usuario con email y contraseña, devuelve tokens JWT.
@@ -332,6 +333,7 @@ def me(request: HttpRequest) -> JsonResponse:
 
 @csrf_exempt
 @require_http_methods(["POST"])
+@rate_limit(max_requests=5, window_seconds=60)
 def register(request: HttpRequest) -> JsonResponse:
     """
     Registra un nuevo usuario en el sistema.

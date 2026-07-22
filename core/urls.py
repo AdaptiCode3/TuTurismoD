@@ -26,7 +26,7 @@ usan el prefijo /api/v1/core/.
 """
 from django.urls import path
 
-from core.views import health_check
+from core.views import health_check, upload_image
 from core.views.auth import login, me, refresh_token, register
 from core.views.favorites import favorites_delete, favorites_list_create
 from core.views.admin import resource_create, resource_update, resource_delete
@@ -60,6 +60,8 @@ urlpatterns = [
     # ── Sistema ───────────────────────────────────────────────────────── #
     # GET /api/v1/core/health/
     path("health/", health_check, name="health_check"),
+    # POST /api/v1/core/upload/
+    path("upload/", upload_image, name="upload_image"),
 
     # ── Autenticación JWT ─────────────────────────────────────────────── #
     # POST /api/v1/core/auth/login/

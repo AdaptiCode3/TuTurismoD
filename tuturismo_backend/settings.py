@@ -152,3 +152,23 @@ if EMAIL_HOST_PASSWORD and EMAIL_HOST:
 else:
     # Fallback seguro a consola para entornos de desarrollo sin API key configurada
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+
+
+# ─── Configuración de Almacenamiento en la Nube (Cloudinary) ─────────────────
+# Lee credenciales de entorno e inicializa el SDK si están configuradas
+CLOUDINARY_CLOUD_NAME = os.environ.get("CLOUDINARY_CLOUD_NAME", "")
+CLOUDINARY_API_KEY = os.environ.get("CLOUDINARY_API_KEY", "")
+CLOUDINARY_API_SECRET = os.environ.get("CLOUDINARY_API_SECRET", "")
+
+if CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET:
+    import cloudinary
+    cloudinary.config(
+        cloud_name=CLOUDINARY_CLOUD_NAME,
+        api_key=CLOUDINARY_API_KEY,
+        api_secret=CLOUDINARY_API_SECRET,
+        secure=True
+    )
+
+# Directorio raíz de estáticos para producción (Render)
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
