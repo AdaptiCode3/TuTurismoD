@@ -84,7 +84,7 @@ class RandomForestRecommender:
                     "imagen_url": p.imagen_url,
                     "rating_promedio": p.rating_promedio or 4.0,
                     "probabilidad_ia": prob,
-                    "razon": "Destacado por nuestra comunidad de turistas (Recomendación Bayesiana inicial)",
+                    "razon": "Destacado por nuestra comunidad de turistas",
                 })
             return results
 
