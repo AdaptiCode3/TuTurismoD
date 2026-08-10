@@ -136,40 +136,34 @@ class EmailRecommendationService:
 
         text_content = f"Hola {nombre}. Hemos recomendado {len(recommendations)} lugares turísticos en Jalisco según tu perfil inteligente de Random Forest. Visita nuestra plataforma web para ver tu itinerario."
 
-        # Intento de envío SMTP
+        # Intento de envío usando el backend configurado en Django settings
+        # (SMTP con Resend si EMAIL_HOST_PASSWORD está configurado, Console si no)
         try:
             msg = EmailMultiAlternatives(subject, text_content, from_email, [user_email])
             msg.attach_alternative(html_content, "text/html")
-            
-            # Verificar si existe configuración de correo o si está en modo consola
-            if getattr(settings, "EMAIL_HOST_PASSWORD", None) or getattr(settings, "EMAIL_BACKEND", "").endswith("console.EmailBackend"):
-                msg.send(fail_silently=False)
-                backend_type = "SMTP (Resend/Brevo)" if getattr(settings, "EMAIL_HOST_PASSWORD", None) else "Consola de Desarrollo"
-                logger.info("✉️ Correo de recomendaciones IA enviado exitosamente vía %s a %s", backend_type, user_email)
-                return {
-                    "success": True,
-                    "message": f"¡Itinerario IA con {len(recommendations)} recomendaciones enviado exitosamente a tu correo ({user_email}) vía {backend_type}!",
-                    "simulated": False,
-                    "count": len(recommendations),
-                }
-            else:
-                # Modo simulación
-                logger.info(
-                    "Correo simulado con %d recomendaciones para %s.",
-                    len(recommendations),
-                    user_email,
-                )
-                return {
-                    "success": True,
-                    "message": f"¡Recomendaciones IA generadas! (Correo para {user_email} simulado con éxito)",
-                    "simulated": True,
-                    "count": len(recommendations),
-                }
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Error enviando correo SMTP a %s: %s. Reportando éxito simulado.", user_email, exc)
+            msg.send(fail_silently=False)
+
+            backend_name = getattr(settings, "EMAIL_BACKEND", "desconocido").split(".")[-1]
+            logger.info(
+                "✉️ Correo IA enviado exitosamente vía %s a %s (%d recomendaciones)",
+                backend_name, user_email, len(recommendations)
+            )
             return {
                 "success": True,
-                "message": f"¡Itinerario de {len(recommendations)} recomendaciones IA procesado con éxito para {user_email}!",
+                "message": f"¡Itinerario IA con {len(recommendations)} recomendaciones enviado exitosamente a tu correo ({user_email})!",
+                "simulated": False,
+                "count": len(recommendations),
+            }
+
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "⚠️ Error enviando correo SMTP a %s: %s. Tipo: %s. Reportando éxito simulado.",
+                user_email, exc, type(exc).__name__
+            )
+            return {
+                "success": True,
+                "message": f"¡Itinerario de {len(recommendations)} recomendaciones IA procesado con éxito para {user_email}! (Correo simulado — verifica configuración SMTP)",
                 "simulated": True,
                 "count": len(recommendations),
             }
+
