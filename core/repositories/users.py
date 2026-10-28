@@ -455,3 +455,29 @@ class UserRepository(BaseRepository[UserDocument]):
 
         self.update(user_id, filtered_updates)
         return self.get_by_id(user_id)
+
+    def get_active_tourist_ids(self, exclude_id: str | None = None) -> list[str]:
+        """Devuelve los IDs de todos los usuarios turistas activos.
+
+        Se usa para despachar notificaciones masivas a todos los turistas.
+
+        Args:
+            exclude_id: ID de usuario a excluir (ej. el admin que crea el recurso).
+
+        Returns:
+            Lista de strings con los ObjectIds de usuarios turistas activos.
+        """
+        try:
+            query: dict = {"rol": "turista", "activo": True}
+            cursor = self._collection.find(query, {"_id": 1})
+            ids = []
+            for doc in cursor:
+                oid = str(doc["_id"])
+                if exclude_id and oid == str(exclude_id):
+                    continue
+                ids.append(oid)
+            logger.info("get_active_tourist_ids: %d turistas activos encontrados.", len(ids))
+            return ids
+        except PyMongoError as exc:
+            logger.error("Error en get_active_tourist_ids: %s", exc)
+            return []

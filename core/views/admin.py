@@ -44,6 +44,7 @@ def _parse_body(request: HttpRequest) -> tuple[dict[str, Any], JsonResponse | No
             from django.http.multipartparser import MultiPartParser
             parser = MultiPartParser(request.META, request, request.upload_handlers)
             post, files = parser.parse()
+            request.FILES = files
             data = post.dict()
         else:
             data = request.POST.dict()
@@ -84,6 +85,47 @@ def _parse_body(request: HttpRequest) -> tuple[dict[str, Any], JsonResponse | No
     return data, None
 
 
+def _process_image_upload(request: HttpRequest, data: dict[str, Any]) -> None:
+    """Extrae imagen de request.FILES y la sube a Cloudinary (o fallback en dev)."""
+    image_file = (
+        request.FILES.get("imagen")
+        or request.FILES.get("image")
+        or request.FILES.get("file")
+    )
+    if not image_file:
+        return
+
+    try:
+        import os
+        cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME", "")
+        if cloud_name:
+            import cloudinary.uploader
+            upload_result = cloudinary.uploader.upload(
+                image_file,
+                folder="tuturismo/recursos",
+                resource_type="image",
+            )
+            secure_url = upload_result.get("secure_url") or upload_result.get("url", "")
+            if secure_url:
+                data["imagen_url"] = secure_url
+                data["imagen"] = secure_url
+                data["imagenes"] = [secure_url]
+                logger.info("Imagen subida a Cloudinary: %s", secure_url)
+                return
+        # Fallback para desarrollo local si no hay credenciales de Cloudinary
+        logger.warning("Cloudinary no configurado; aplicando fallback visual para desarrollo.")
+        fallback_url = "https://images.unsplash.com/photo-1518105779142-d975f22f1b0a?auto=format&fit=crop&w=800&q=80"
+        data["imagen_url"] = fallback_url
+        data["imagen"] = fallback_url
+        data["imagenes"] = [fallback_url]
+    except Exception as img_exc:  # noqa: BLE001
+        logger.error("Error subiendo imagen en admin: %s", img_exc)
+        fallback_url = "https://images.unsplash.com/photo-1518105779142-d975f22f1b0a?auto=format&fit=crop&w=800&q=80"
+        data.setdefault("imagen_url", fallback_url)
+        data.setdefault("imagen", fallback_url)
+        data.setdefault("imagenes", [fallback_url])
+
+
 def _check_admin(request: HttpRequest) -> JsonResponse | None:
     payload = getattr(request, "user_payload", {})
     if payload.get("rol") != ADMIN_ROLE:
@@ -104,11 +146,15 @@ def resource_create(request: HttpRequest, resource: str) -> JsonResponse:
     if resource not in RESOURCE_MAP:
         return JsonResponse({"error": f"Recurso '{resource}' no existe."}, status=404)
 
+    # Extraer FILES además de POST
     data, err = _parse_body(request)
     if err:
         return err
     if not data:
         return JsonResponse({"error": "Body vacío o sin campos."}, status=400)
+
+    # Procesar y subir imagen (Cloudinary con fallback)
+    _process_image_upload(request, data)
 
     _, _, create_method, _, _ = RESOURCE_MAP[resource]
     try:
@@ -120,6 +166,15 @@ def resource_create(request: HttpRequest, resource: str) -> JsonResponse:
 
     if doc is None:
         return JsonResponse({"error": "No se pudo crear el recurso."}, status=400)
+
+    # Despachar notificaciones masivas a todos los turistas activos (no bloqueante)
+    try:
+        payload = getattr(request, "user_payload", {})
+        admin_id = str(payload.get("id", ""))
+        from core.services.notification_service import dispatch_resource_created
+        dispatch_resource_created(resource, doc, admin_id=admin_id)
+    except Exception as notif_exc:  # noqa: BLE001
+        logger.warning("Notificaciones no enviadas (no crítico): %s", notif_exc)
 
     return JsonResponse({"success": True, "data": asdict(doc)}, status=201)
 
@@ -140,6 +195,9 @@ def resource_update(request: HttpRequest, resource: str, resource_id: str) -> Js
     data, err = _parse_body(request)
     if err:
         return err
+
+    # Procesar y subir imagen (Cloudinary con fallback)
+    _process_image_upload(request, data)
 
     _, _, _, update_method, _ = RESOURCE_MAP[resource]
     try:

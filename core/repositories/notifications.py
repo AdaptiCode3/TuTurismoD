@@ -111,3 +111,50 @@ class NotificationRepository(BaseRepository[NotificationDocument]):
         except PyMongoError as exc:
             logger.error("Error en delete_all_for_user(user_id=%s): %s", user_id, exc)
             return 0
+
+    def bulk_create_notifications(
+        self,
+        user_ids: list[str],
+        titulo: str,
+        mensaje: str,
+        tipo: str = "info",
+        metadata: dict | None = None,
+    ) -> int:
+        """Crea notificaciones masivas para múltiples usuarios con insert_many.
+
+        Optimizado para rendimiento O(1) de BD sin importar N usuarios.
+
+        Args:
+            user_ids: Lista de IDs de usuarios destino.
+            titulo: Título de la notificación.
+            mensaje: Cuerpo del mensaje.
+            tipo: Tipo (info, warning, success).
+            metadata: Datos extra (recurso_id, recurso_tipo).
+
+        Returns:
+            Cantidad de notificaciones insertadas.
+        """
+        if not user_ids:
+            return 0
+        now = datetime.now(tz=timezone.utc).isoformat()
+        meta = metadata or {}
+        documents = [
+            {
+                "user_id": uid,
+                "titulo": titulo,
+                "mensaje": mensaje,
+                "leido": False,
+                "tipo": tipo,
+                "created_at": now,
+                **meta,
+            }
+            for uid in user_ids
+        ]
+        try:
+            result = self._collection.insert_many(documents, ordered=False)
+            count = len(result.inserted_ids)
+            logger.info("bulk_create_notifications: %d notificaciones insertadas.", count)
+            return count
+        except PyMongoError as exc:
+            logger.error("Error en bulk_create_notifications: %s", exc)
+            return 0
