@@ -36,26 +36,42 @@ def _get_repo(resource: str):
     return getattr(module, class_name)
 
 
-def _parse_body(request: HttpRequest) -> tuple[dict[str, Any], JsonResponse | None]:
+def _parse_body(request: HttpRequest) -> tuple[dict[str, Any], Any, JsonResponse | None]:
+    """Parsea JSON o multipart (POST/PUT/PATCH). Devuelve (data, files, error).
+
+    Django sólo procesa multipart automáticamente en POST. Para PUT/PATCH se usa
+    MultiPartParser manualmente; los archivos se devuelven en lugar de asignarse a
+    request.FILES, que es una propiedad de sólo lectura en WSGIRequest.
+    """
+    from django.http.multipartparser import MultiPartParserError
+    from django.utils.datastructures import MultiValueDict
+
     data: dict[str, Any] = {}
+    files: Any = MultiValueDict()
     content_type = getattr(request, "content_type", "") or request.META.get("CONTENT_TYPE", "")
     if "multipart/form-data" in content_type:
         if request.method in ["PUT", "PATCH"]:
             from django.http.multipartparser import MultiPartParser
-            parser = MultiPartParser(request.META, request, request.upload_handlers)
-            post, files = parser.parse()
-            request.FILES = files
+            try:
+                parser = MultiPartParser(request.META, request, request.upload_handlers)
+                post, files = parser.parse()
+            except MultiPartParserError as exc:
+                logger.warning("Multipart inválido en %s: %s", request.method, exc)
+                return {}, files, JsonResponse({"error": "Formulario inválido."}, status=400)
             data = post.dict()
         else:
             data = request.POST.dict()
+            files = request.FILES
     else:
         try:
             body = request.body.decode("utf-8").strip()
             if not body:
-                return {}, JsonResponse({"error": "Body vacío."}, status=400)
+                return {}, files, JsonResponse({"error": "Body vacío."}, status=400)
             data = json.loads(body)
         except (json.JSONDecodeError, UnicodeDecodeError):
-            return {}, JsonResponse({"error": "JSON inválido."}, status=400)
+            return {}, files, JsonResponse({"error": "JSON inválido."}, status=400)
+        if not isinstance(data, dict):
+            return {}, files, JsonResponse({"error": "JSON inválido."}, status=400)
 
     # Normalizar coordenadas GeoJSON y planas
     lat = data.get("latitud")
@@ -82,17 +98,28 @@ def _parse_body(request: HttpRequest) -> tuple[dict[str, Any], JsonResponse | No
         except (ValueError, TypeError):
             pass
 
-    return data, None
+    return data, files, None
 
 
-def _process_image_upload(request: HttpRequest, data: dict[str, Any]) -> None:
-    """Extrae imagen de request.FILES y la sube a Cloudinary (o fallback en dev)."""
+def _sync_existing_image(data: dict[str, Any]) -> None:
+    """Si se conserva la imagen actual (imagen_url sin archivo nuevo), replica el valor
+    en los campos alternos para que todas las vistas la lean igual."""
+    url = str(data.get("imagen_url") or "").strip()
+    if url.startswith("http"):
+        data["imagen_url"] = url
+        data["imagen"] = url
+        data["imagenes"] = [url]
+
+
+def _process_image_upload(files: Any, data: dict[str, Any]) -> None:
+    """Extrae la imagen de los archivos recibidos y la sube a Cloudinary (o fallback en dev)."""
     image_file = (
-        request.FILES.get("imagen")
-        or request.FILES.get("image")
-        or request.FILES.get("file")
-    )
+        files.get("imagen")
+        or files.get("image")
+        or files.get("file")
+    ) if files else None
     if not image_file:
+        _sync_existing_image(data)
         return
 
     try:
@@ -112,18 +139,25 @@ def _process_image_upload(request: HttpRequest, data: dict[str, Any]) -> None:
                 data["imagenes"] = [secure_url]
                 logger.info("Imagen subida a Cloudinary: %s", secure_url)
                 return
-        # Fallback para desarrollo local si no hay credenciales de Cloudinary
-        logger.warning("Cloudinary no configurado; aplicando fallback visual para desarrollo.")
-        fallback_url = "https://images.unsplash.com/photo-1518105779142-d975f22f1b0a?auto=format&fit=crop&w=800&q=80"
-        data["imagen_url"] = fallback_url
-        data["imagen"] = fallback_url
-        data["imagenes"] = [fallback_url]
+        # Cloudinary no configurado: conservar la imagen actual si existe
+        logger.warning("Cloudinary no configurado; no se pudo subir la imagen nueva.")
+        _apply_image_fallback(data)
     except Exception as img_exc:  # noqa: BLE001
         logger.error("Error subiendo imagen en admin: %s", img_exc)
-        fallback_url = "https://images.unsplash.com/photo-1518105779142-d975f22f1b0a?auto=format&fit=crop&w=800&q=80"
-        data.setdefault("imagen_url", fallback_url)
-        data.setdefault("imagen", fallback_url)
-        data.setdefault("imagenes", [fallback_url])
+        _apply_image_fallback(data)
+
+
+_DEV_FALLBACK_IMAGE = "https://images.unsplash.com/photo-1518105779142-d975f22f1b0a?auto=format&fit=crop&w=800&q=80"
+
+
+def _apply_image_fallback(data: dict[str, Any]) -> None:
+    """Conserva la imagen existente; sólo usa la imagen genérica si no había ninguna."""
+    if str(data.get("imagen_url") or "").strip().startswith("http"):
+        _sync_existing_image(data)
+        return
+    data["imagen_url"] = _DEV_FALLBACK_IMAGE
+    data["imagen"] = _DEV_FALLBACK_IMAGE
+    data["imagenes"] = [_DEV_FALLBACK_IMAGE]
 
 
 def _check_admin(request: HttpRequest) -> JsonResponse | None:
@@ -147,14 +181,14 @@ def resource_create(request: HttpRequest, resource: str) -> JsonResponse:
         return JsonResponse({"error": f"Recurso '{resource}' no existe."}, status=404)
 
     # Extraer FILES además de POST
-    data, err = _parse_body(request)
+    data, files, err = _parse_body(request)
     if err:
         return err
     if not data:
         return JsonResponse({"error": "Body vacío o sin campos."}, status=400)
 
     # Procesar y subir imagen (Cloudinary con fallback)
-    _process_image_upload(request, data)
+    _process_image_upload(files, data)
 
     _, _, create_method, _, _ = RESOURCE_MAP[resource]
     try:
@@ -192,12 +226,12 @@ def resource_update(request: HttpRequest, resource: str, resource_id: str) -> Js
     if resource not in RESOURCE_MAP:
         return JsonResponse({"error": f"Recurso '{resource}' no existe."}, status=404)
 
-    data, err = _parse_body(request)
+    data, files, err = _parse_body(request)
     if err:
         return err
 
     # Procesar y subir imagen (Cloudinary con fallback)
-    _process_image_upload(request, data)
+    _process_image_upload(files, data)
 
     _, _, _, update_method, _ = RESOURCE_MAP[resource]
     try:
@@ -206,6 +240,9 @@ def resource_update(request: HttpRequest, resource: str, resource_id: str) -> Js
     except RuntimeError as exc:
         logger.critical("MongoDB no disponible en admin update: %s", exc)
         return JsonResponse({"error": "Servicio no disponible."}, status=503)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Error inesperado en admin update [%s/%s]: %s", resource, resource_id, exc)
+        return JsonResponse({"error": "No se pudo actualizar el recurso."}, status=500)
 
     if doc is None:
         return JsonResponse({"error": "Recurso no encontrado."}, status=404)

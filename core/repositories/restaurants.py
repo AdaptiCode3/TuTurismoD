@@ -214,6 +214,8 @@ class RestaurantRepository(BaseRepository[RestaurantDocument]):
         if raw_imagen:
             return raw_imagen
         raw_imagenes = document.get("imagenes")
+        if isinstance(raw_imagenes, list) and raw_imagenes:
+            return str(raw_imagenes[0])
         if isinstance(raw_imagenes, str):
             import json
             try:

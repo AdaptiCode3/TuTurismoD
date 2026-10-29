@@ -458,3 +458,99 @@ def register(request: HttpRequest) -> JsonResponse:
         },
         status=201,
     )
+
+
+# --------------------------------------------------------------------------- #
+# POST /api/v1/core/auth/me/delete/
+# --------------------------------------------------------------------------- #
+
+DELETE_CONFIRMATION_PHRASE = "ELIMINAR"
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@rate_limit(max_requests=5, window_seconds=300)
+@jwt_required
+def delete_account(request: HttpRequest) -> JsonResponse:
+    """
+    Elimina de forma permanente la cuenta del usuario autenticado.
+
+    Doble validación contra errores accidentales:
+      1. `confirmacion` debe ser exactamente "ELIMINAR".
+      2. `password` debe coincidir con la contraseña actual (bcrypt).
+
+    Request body (JSON):
+        { "password": "...", "confirmacion": "ELIMINAR" }
+
+    Responses:
+        200 OK  → Cuenta eliminada (también favoritos y notificaciones).
+        400     → Campos faltantes, frase incorrecta o último admin.
+        401     → Contraseña incorrecta.
+        404     → Usuario no encontrado.
+        429     → Demasiados intentos.
+        503     → MongoDB no disponible.
+    """
+    data, error_response = _parse_json_body(request)
+    if error_response:
+        return error_response
+
+    password: str = str(data.get("password", ""))
+    confirmacion: str = str(data.get("confirmacion", "")).strip()
+
+    if not password:
+        return JsonResponse(
+            {"error": "Contraseña requerida.", "detail": "Ingresa tu contraseña para confirmar."},
+            status=400,
+        )
+    if confirmacion != DELETE_CONFIRMATION_PHRASE:
+        return JsonResponse(
+            {
+                "error": "Confirmación incorrecta.",
+                "detail": f"Escribe exactamente '{DELETE_CONFIRMATION_PHRASE}' para confirmar.",
+            },
+            status=400,
+        )
+
+    payload: dict[str, Any] = request.user_payload  # type: ignore[attr-defined]
+    user_id: str = str(payload.get("id", ""))
+
+    try:
+        repo = UserRepository()
+        user = repo.get_by_id(user_id)
+        if user is None:
+            return JsonResponse({"error": "Usuario no encontrado."}, status=404)
+
+        if not PasswordService.verify(password, user.password_hash):
+            logger.warning("Eliminación de cuenta rechazada: contraseña incorrecta user_id='%s'", user_id)
+            return JsonResponse(
+                {"error": "Contraseña incorrecta.", "detail": "La contraseña no coincide con tu cuenta."},
+                status=401,
+            )
+
+        # Evitar dejar el sistema sin administradores
+        if user.rol == "admin" and repo.count({"rol": "admin", "activo": True}) <= 1:
+            return JsonResponse(
+                {
+                    "error": "No se puede eliminar.",
+                    "detail": "Eres el único administrador activo. Asigna otro administrador primero.",
+                },
+                status=400,
+            )
+
+        if not repo.delete(user_id):
+            return JsonResponse({"error": "No se pudo eliminar la cuenta."}, status=500)
+    except RuntimeError as exc:
+        logger.critical("MongoDB no disponible en delete_account: %s", exc)
+        return JsonResponse({"error": "Servicio no disponible."}, status=503)
+
+    # Limpieza de datos asociados (no bloqueante)
+    try:
+        from core.repositories.favorites import FavoriteRepository
+        from core.repositories.notifications import NotificationRepository
+        FavoriteRepository().remove_all_for_user(user_id)
+        NotificationRepository().delete_all_for_user(user_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Limpieza parcial tras eliminar cuenta user_id='%s': %s", user_id, exc)
+
+    logger.info("Cuenta eliminada por su titular: user_id='%s'", user_id)
+    return JsonResponse({"success": True, "message": "Tu cuenta fue eliminada correctamente."}, status=200)

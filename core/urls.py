@@ -27,7 +27,7 @@ usan el prefijo /api/v1/core/.
 from django.urls import path
 
 from core.views import health_check, upload_image
-from core.views.auth import login, me, refresh_token, register
+from core.views.auth import delete_account, login, me, refresh_token, register
 from core.views.favorites import favorites_delete, favorites_list_create
 from core.views.admin import resource_create, resource_update, resource_delete
 from core.views.stats import admin_stats, admin_spatial_density
@@ -72,6 +72,8 @@ urlpatterns = [
     path("auth/refresh/",  refresh_token, name="auth_refresh"),
     # GET/PUT/PATCH  /api/v1/core/auth/me/
     path("auth/me/",       me,            name="auth_me"),
+    # POST /api/v1/core/auth/me/delete/  (eliminación de cuenta propia)
+    path("auth/me/delete/", delete_account, name="auth_delete_account"),
 
     # POST /api/v1/core/auth/password/send-code/ (y opcional sin barra)
     path("auth/password/send-code",   send_recovery_code,   name="password_send_code"),
