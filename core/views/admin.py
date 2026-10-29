@@ -104,15 +104,26 @@ def _parse_body(request: HttpRequest) -> tuple[dict[str, Any], Any, JsonResponse
 def _sync_existing_image(data: dict[str, Any]) -> None:
     """Si se conserva la imagen actual (imagen_url sin archivo nuevo), replica el valor
     en los campos alternos para que todas las vistas la lean igual."""
-    url = str(data.get("imagen_url") or "").strip()
-    if url.startswith("http"):
+    url = str(data.get("imagen_url") or data.get("imagen") or "").strip()
+    if url.startswith("http") or url.startswith("data:image/"):
         data["imagen_url"] = url
         data["imagen"] = url
         data["imagenes"] = [url]
 
 
+_PLACEHOLDER_CLOUD_NAMES = {"", "tuturismo", "your_cloud_name", "demo", "none", "null"}
+
+
+def _file_to_data_uri(raw_bytes: bytes, content_type: str) -> str:
+    """Convierte bytes de imagen en un Data URI base64 persistible en MongoDB."""
+    import base64
+    mime = content_type if content_type and content_type.startswith("image/") else "image/jpeg"
+    b64 = base64.b64encode(raw_bytes).decode("ascii")
+    return f"data:{mime};base64,{b64}"
+
+
 def _process_image_upload(files: Any, data: dict[str, Any]) -> None:
-    """Extrae la imagen de los archivos recibidos y la sube a Cloudinary (o fallback en dev)."""
+    """Extrae la imagen de los archivos recibidos y la sube a Cloudinary o la codifica en Data URI."""
     image_file = (
         files.get("imagen")
         or files.get("image")
@@ -122,13 +133,26 @@ def _process_image_upload(files: Any, data: dict[str, Any]) -> None:
         _sync_existing_image(data)
         return
 
+    raw_bytes: bytes = b""
+    content_type: str = getattr(image_file, "content_type", "image/jpeg") or "image/jpeg"
+    try:
+        image_file.seek(0)
+        raw_bytes = image_file.read()
+    except Exception as read_exc:  # noqa: BLE001
+        logger.error("Error leyendo bytes de imagen en admin: %s", read_exc)
+
+    if not raw_bytes:
+        _sync_existing_image(data)
+        return
+
     try:
         import os
-        cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME", "")
-        if cloud_name:
+        cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME", "").strip()
+        if cloud_name.lower() not in _PLACEHOLDER_CLOUD_NAMES:
+            import io
             import cloudinary.uploader
             upload_result = cloudinary.uploader.upload(
-                image_file,
+                io.BytesIO(raw_bytes),
                 folder="tuturismo/recursos",
                 resource_type="image",
             )
@@ -139,25 +163,15 @@ def _process_image_upload(files: Any, data: dict[str, Any]) -> None:
                 data["imagenes"] = [secure_url]
                 logger.info("Imagen subida a Cloudinary: %s", secure_url)
                 return
-        # Cloudinary no configurado: conservar la imagen actual si existe
-        logger.warning("Cloudinary no configurado; no se pudo subir la imagen nueva.")
-        _apply_image_fallback(data)
     except Exception as img_exc:  # noqa: BLE001
-        logger.error("Error subiendo imagen en admin: %s", img_exc)
-        _apply_image_fallback(data)
+        logger.warning("Cloudinary no disponible (%s); guardando imagen como Data URI.", img_exc)
 
-
-_DEV_FALLBACK_IMAGE = "https://images.unsplash.com/photo-1518105779142-d975f22f1b0a?auto=format&fit=crop&w=800&q=80"
-
-
-def _apply_image_fallback(data: dict[str, Any]) -> None:
-    """Conserva la imagen existente; sólo usa la imagen genérica si no había ninguna."""
-    if str(data.get("imagen_url") or "").strip().startswith("http"):
-        _sync_existing_image(data)
-        return
-    data["imagen_url"] = _DEV_FALLBACK_IMAGE
-    data["imagen"] = _DEV_FALLBACK_IMAGE
-    data["imagenes"] = [_DEV_FALLBACK_IMAGE]
+    # Fallback confiable: almacenar la imagen real subida como Data URI base64 en MongoDB
+    data_uri = _file_to_data_uri(raw_bytes, content_type)
+    data["imagen_url"] = data_uri
+    data["imagen"] = data_uri
+    data["imagenes"] = [data_uri]
+    logger.info("Imagen almacenada como Data URI (%d bytes).", len(raw_bytes))
 
 
 def _check_admin(request: HttpRequest) -> JsonResponse | None:

@@ -25,12 +25,17 @@ class EventDocument:
     descripcion: str = ""
     categoria: str = ""
     municipio: str = ""
+    direccion: str = ""
+    fecha: str = ""
     fecha_inicio: str = ""
     fecha_fin: str = ""
     imagen_url: str = ""
     activo: bool = True
     coordenadas: Optional[dict[str, float]] = None
     tags: list[str] = field(default_factory=list)
+    rating: Optional[float] = None
+    rating_promedio: Optional[float] = None
+    calificacion: Optional[float] = None
 
 
 class EventRepository(BaseRepository[EventDocument]):
@@ -83,20 +88,39 @@ class EventRepository(BaseRepository[EventDocument]):
                 descripcion=desc_clean,
             )
 
+            raw_rating = (
+                document.get("rating")
+                if document.get("rating") is not None
+                else (
+                    document.get("rating_promedio")
+                    if document.get("rating_promedio") is not None
+                    else document.get("calificacion")
+                )
+            )
+            rating_val: Optional[float] = None
+            if raw_rating is not None and str(raw_rating).strip() != "":
+                try:
+                    rating_val = round(float(raw_rating), 1)
+                except (ValueError, TypeError):
+                    pass
+
+            fecha_str = str(
+                document.get("fecha")
+                or document.get("fecha_inicio")
+                or document.get("date")
+                or document.get("date_start")
+                or ""
+            )
+
             return EventDocument(
                 id=doc_id,
                 nombre=nombre_clean,
                 descripcion=desc_clean,
                 categoria=str(document.get("categoria") or document.get("category") or ""),
                 municipio=resolved_muni,
-                # Acepta fecha_inicio, fecha, date o date_start
-                fecha_inicio=str(
-                    document.get("fecha_inicio")
-                    or document.get("fecha")
-                    or document.get("date")
-                    or document.get("date_start")
-                    or ""
-                ),
+                direccion=str(document.get("direccion") or document.get("lugar") or ""),
+                fecha=fecha_str,
+                fecha_inicio=fecha_str,
                 fecha_fin=str(
                     document.get("fecha_fin")
                     or document.get("date_end")
@@ -106,6 +130,9 @@ class EventRepository(BaseRepository[EventDocument]):
                 activo=bool(document.get("activo", True)),
                 coordenadas=coordenadas,
                 tags=tags,
+                rating=rating_val,
+                rating_promedio=rating_val,
+                calificacion=rating_val,
             )
 
         except Exception as exc:  # noqa: BLE001

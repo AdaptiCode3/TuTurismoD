@@ -62,12 +62,14 @@ class PlaceDocument:
     nombre: str = ""
     municipio: str = ""
     categoria: str = ""
+    categoria_id: str = ""
     descripcion: str = ""
     direccion: str = ""
     imagen_url: str = ""
     coordenadas: Optional[dict[str, float]] = None
     activo: bool = True
     tags: list[str] = field(default_factory=list)
+    rating: Optional[float] = None
     rating_promedio: Optional[float] = None
     calificacion: Optional[float] = None
     reviews_count: int = 0
@@ -211,12 +213,14 @@ class PlaceRepository(BaseRepository[PlaceDocument]):
                 nombre=nombre_clean,
                 municipio=resolved_muni,
                 categoria=str(document.get("categoria") or document.get("category") or ""),
+                categoria_id=str(document.get("categoria_id") or ""),
                 descripcion=desc_clean,
                 direccion=dir_clean,
                 imagen_url=self._parse_imagen(document),
                 coordenadas=coordenadas,
                 activo=bool(document.get("activo", True)),
                 tags=tags,
+                rating=rating_prom,
                 rating_promedio=rating_prom,
                 calificacion=rating_prom,
                 reviews_count=rev_count,

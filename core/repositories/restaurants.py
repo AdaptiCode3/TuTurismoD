@@ -70,7 +70,10 @@ class RestaurantDocument:
     horario: str = ""
     precio_rango: str = ""
     imagen_url: str = ""
+    web: str = ""
     coordenadas: Optional[dict[str, float]] = None
+    rating: Optional[float] = None
+    rating_promedio: Optional[float] = None
     calificacion: Optional[float] = None
     activo: bool = True
     tags: list[str] = field(default_factory=list)
@@ -163,9 +166,17 @@ class RestaurantRepository(BaseRepository[RestaurantDocument]):
                 tags = []
 
             # ── Calificación ── #
-            raw_cal = document.get("calificacion") or document.get("rating")
+            raw_cal = (
+                document.get("calificacion")
+                if document.get("calificacion") is not None
+                else (
+                    document.get("rating")
+                    if document.get("rating") is not None
+                    else document.get("rating_promedio")
+                )
+            )
             calificacion: Optional[float] = None
-            if raw_cal is not None:
+            if raw_cal is not None and str(raw_cal).strip() != "":
                 try:
                     calificacion = round(float(raw_cal), 1)
                 except (TypeError, ValueError):
@@ -197,7 +208,10 @@ class RestaurantRepository(BaseRepository[RestaurantDocument]):
                     document.get("precio_rango") or document.get("price_range") or ""
                 ),
                 imagen_url=self._parse_imagen(document),
+                web=str(document.get("web") or document.get("sitio_web") or ""),
                 coordenadas=coordenadas,
+                rating=calificacion,
+                rating_promedio=calificacion,
                 calificacion=calificacion,
                 activo=bool(document.get("activo", True)),
                 tags=tags,

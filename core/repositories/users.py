@@ -433,6 +433,16 @@ class UserRepository(BaseRepository[UserDocument]):
         if "avatar" in filtered_updates and isinstance(filtered_updates["avatar"], str):
             filtered_updates["avatar"] = filtered_updates["avatar"].strip()
 
+        # Fusionar diccionario de preferences para no sobreescribir claves existentes (ej. collected_spots, badges)
+        if "preferences" in filtered_updates and isinstance(filtered_updates["preferences"], dict):
+            current_user = self.get_by_id(user_id)
+            existing_prefs = (
+                current_user.preferences
+                if current_user and isinstance(current_user.preferences, dict)
+                else {}
+            )
+            filtered_updates["preferences"] = {**existing_prefs, **filtered_updates["preferences"]}
+
         # Si solicitan actualización de email
         if "email" in updates and updates["email"]:
             new_email = str(updates["email"]).strip().lower()

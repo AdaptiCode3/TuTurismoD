@@ -197,12 +197,7 @@ def login(request: HttpRequest) -> JsonResponse:
             "refresh_token": refresh_token,
             "token_type":    "Bearer",
             "expires_in":    86_400,    # 24 horas en segundos
-            "user": {
-                "id":     user.id,
-                "email":  user.email,
-                "rol":    user.rol,
-                "nombre": user.nombre,
-            },
+            "user":          user.to_safe_dict(),
         },
         status=200,
     )
@@ -449,12 +444,7 @@ def register(request: HttpRequest) -> JsonResponse:
             "refresh_token": refresh_token,
             "token_type":    "Bearer",
             "expires_in":    86_400,
-            "user": {
-                "id":     user.id,
-                "email":  user.email,
-                "rol":    user.rol,
-                "nombre": user.nombre,
-            },
+            "user":          user.to_safe_dict(),
         },
         status=201,
     )
