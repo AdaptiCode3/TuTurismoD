@@ -55,7 +55,8 @@ class NotificationRepository(BaseRepository[NotificationDocument]):
         return self.get_all(
             query={"user_id": user_id},
             limit=limit,
-            sort_by="-created_at",
+            sort_by="created_at",
+            sort_order=-1,
         )
 
     def create_notification(

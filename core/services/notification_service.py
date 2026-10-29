@@ -12,17 +12,17 @@ logger = logging.getLogger(__name__)
 
 RESOURCE_MESSAGES = {
     "places": {
-        "titulo": "🗺️ ¡Nuevo destino en Tu-Turismo!",
+        "titulo": "¡Nuevo destino en Tu-Turismo!",
         "mensaje_tpl": "Descubre '{nombre}' en {municipio}. ¡Un nuevo atractivo turístico te espera!",
         "tipo": "info",
     },
     "restaurants": {
-        "titulo": "🍽️ ¡Nueva experiencia gastronómica!",
+        "titulo": "¡Nueva experiencia gastronómica!",
         "mensaje_tpl": "Conoce '{nombre}', el nuevo restaurante en tu catálogo favorito. ¡Dale una probada!",
         "tipo": "info",
     },
     "events": {
-        "titulo": "🎉 ¡Nuevo evento en Jalisco!",
+        "titulo": "¡Nuevo evento en Jalisco!",
         "mensaje_tpl": "'{nombre}' ya está en la agenda. ¡No te lo pierdas!",
         "tipo": "info",
     },

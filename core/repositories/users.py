@@ -457,18 +457,21 @@ class UserRepository(BaseRepository[UserDocument]):
         return self.get_by_id(user_id)
 
     def get_active_tourist_ids(self, exclude_id: str | None = None) -> list[str]:
-        """Devuelve los IDs de todos los usuarios turistas activos.
+        """Devuelve los IDs de todos los usuarios activos para notificaciones masivas.
 
-        Se usa para despachar notificaciones masivas a todos los turistas.
+        Nota: En MongoDB, documentos históricos de usuarios no siempre incluyen
+        el campo explícito 'activo: True' (por defecto se consideran activos a
+        menos que 'activo' sea False). Además se notifica a todos los usuarios
+        activos registrados (excluyendo únicamente al creador del recurso).
 
         Args:
-            exclude_id: ID de usuario a excluir (ej. el admin que crea el recurso).
+            exclude_id: ID de usuario a excluir (ej. el usuario que crea el recurso).
 
         Returns:
-            Lista de strings con los ObjectIds de usuarios turistas activos.
+            Lista de strings con los ObjectIds de los demás usuarios activos.
         """
         try:
-            query: dict = {"rol": "turista", "activo": True}
+            query: dict = {"activo": {"$ne": False}}
             cursor = self._collection.find(query, {"_id": 1})
             ids = []
             for doc in cursor:
@@ -476,7 +479,7 @@ class UserRepository(BaseRepository[UserDocument]):
                 if exclude_id and oid == str(exclude_id):
                     continue
                 ids.append(oid)
-            logger.info("get_active_tourist_ids: %d turistas activos encontrados.", len(ids))
+            logger.info("get_active_tourist_ids: %d usuarios activos encontrados.", len(ids))
             return ids
         except PyMongoError as exc:
             logger.error("Error en get_active_tourist_ids: %s", exc)
